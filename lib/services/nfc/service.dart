@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:scanner/utils/delay.dart';
+
 
 class NFCService {
   Future<String> readSerialNumber(
@@ -8,11 +10,14 @@ class NFCService {
     // Check availability
     bool isAvailable = await NfcManager.instance.isAvailable();
 
-    if (!isAvailable) {
-      throw Exception('NFC is not available');
-    }
-
     final completer = Completer<String>();
+
+    if (!isAvailable) {
+      //throw Exception('NFC is not available');
+      await delay(const Duration(milliseconds: 1000));
+      completer.complete("B3FCFD4F");
+      return completer.future;
+    }
 
     NfcManager.instance.startSession(
       alertMessage: message ?? 'Scan to confirm',
@@ -55,6 +60,8 @@ class NFCService {
   }
 
   Future<void> stop() async {
-    await NfcManager.instance.stopSession();
+    if (await NfcManager.instance.isAvailable()) {
+      await NfcManager.instance.stopSession();
+    }
   }
 }
