@@ -107,13 +107,15 @@ class _KioskScreenState extends State<KioskScreen> {
       ),
     );
 
+    /* quick hack for rpi testing
+     *  modal bottom sheet keyboard doesn't display
     if (codeValue == null ||
         codeValue.isEmpty ||
         codeValue.length != 6 ||
         codeValue != '123987') {
       return false;
     }
-
+    */
     return true;
   }
 
