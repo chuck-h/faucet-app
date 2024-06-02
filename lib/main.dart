@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:scanner/router/routes.dart';
 import 'package:scanner/services/config/service.dart';
+import 'package:scanner/services/nats/nats.dart';
 import 'package:scanner/services/preferences/service.dart';
 import 'package:scanner/state/app/logic.dart';
 import 'package:scanner/state/app/state.dart';
@@ -21,6 +22,11 @@ void main() async {
 
   config.init(
     dotenv.get('WALLET_CONFIG_URL'),
+  );
+
+  final ns = NatsService();
+  await ns.init(
+    servers: dotenv.get('NATS_SERVERS', fallback: 'nats://192.168.1.132:4222')
   );
 
   runApp(provideAppState(const RootScreen()));

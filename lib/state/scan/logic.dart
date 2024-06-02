@@ -303,7 +303,7 @@ class ScanLogic extends WidgetsBindingObserver {
       _state.setNfcReading(true);
 
       final serialNumber = await _nfc.readSerialNumber(
-        message: 'Scan to purchase for $amount $symbol',
+        message: 'purchase for\n $amount $symbol\n \nSCAN WRISTBAND\n  TO PAY',
         successMessage: 'Purchased for $amount $symbol',
       );
 
@@ -351,17 +351,26 @@ class ScanLogic extends WidgetsBindingObserver {
       await _web3.waitForTxSuccess(txHash);
 
       _state.updateStatus(ScanStateType.ready);
+      await _nfc.displayMessage('Purchased for\n $amount $symbol');
       return 'Purchase confirmed';
+
     } catch (e, s) {
       print(e);
       print(s);
       if (e is Exception) {
+        _state.setNfcReading(false);
         _state.updateStatus(ScanStateType.ready);
+        await _nfc.displayMessage('Failed to Purchase\n \n${
+          e.toString().replaceFirst('Exception: ','')
+        }');
         return e.toString();
       }
     }
 
+    _state.setNfcReading(false);
     _state.updateStatus(ScanStateType.ready);
+    await _nfc.displayMessage('Failed to Purchase');
+
     return 'Failed to purchase';
   }
 
@@ -438,10 +447,16 @@ class ScanLogic extends WidgetsBindingObserver {
       _state.setAddressBalance(formattedBalance);
 
       return address.hexEip55;
-    } catch (_) {
+    } catch (e) {
       _state.setNfcAddressError();
       _state.setAddressBalance(null);
       _state.setNfcReading(false);
+      if (e is Exception) {
+        _state.updateStatus(ScanStateType.ready);
+        await _nfc.displayMessage('Scan failure\n \n${
+          e.toString().replaceFirst('Exception: ','')
+        }');
+      }
     }
 
     return null;

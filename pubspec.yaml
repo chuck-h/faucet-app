@@ -56,6 +56,8 @@ dependencies:
   universal_io: ^2.2.2
   simple_animations: ^5.0.2
   rate_limiter: ^1.0.0
+  dart_nats: ^0.6.2
+
 
 dev_dependencies:
   flutter_test:
