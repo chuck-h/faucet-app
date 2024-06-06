@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
@@ -70,9 +72,11 @@ class _KioskScreenState extends State<KioskScreen> {
     final height = MediaQuery.of(context).size.height;
 
     TextEditingController codeController = TextEditingController();
+    final FocusNode _focusNode = FocusNode();
 
     final codeValue = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) => Container(
         height: height * 0.75,
         width: width,
@@ -81,6 +85,7 @@ class _KioskScreenState extends State<KioskScreen> {
           children: [
             TextField(
               controller: codeController,
+              focusNode: _focusNode,
               decoration: const InputDecoration(
                 labelText: 'Code',
               ),
@@ -89,10 +94,10 @@ class _KioskScreenState extends State<KioskScreen> {
               autocorrect: false,
               autofocus: true,
               enableSuggestions: false,
-              keyboardType: const TextInputType.numberWithOptions(
+              /*keyboardType: const TextInputType.numberWithOptions(
                 decimal: false,
                 signed: false,
-              ),
+              ), */
               textInputAction: TextInputAction.done,
             ),
             OutlinedButton.icon(
@@ -102,20 +107,20 @@ class _KioskScreenState extends State<KioskScreen> {
               icon: const Icon(Icons.qr_code),
               label: const Text('Confirm'),
             ),
+            MyVirtualKeyboard(),
           ],
         ),
       ),
+      
     );
 
-    /* quick hack for rpi testing
-     *  modal bottom sheet keyboard doesn't display
     if (codeValue == null ||
         codeValue.isEmpty ||
         codeValue.length != 6 ||
         codeValue != '123987') {
       return false;
     }
-    */
+
     return true;
   }
 
@@ -132,6 +137,7 @@ class _KioskScreenState extends State<KioskScreen> {
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) {
         final vendorAddress = modalContext.watch<ScanState>().vendorAddress;
         final vendorBalance = modalContext.watch<ScanState>().vendorBalance;
@@ -217,6 +223,7 @@ class _KioskScreenState extends State<KioskScreen> {
 
     showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) => Container(
         height: height * 0.75,
         width: width,
@@ -264,6 +271,7 @@ class _KioskScreenState extends State<KioskScreen> {
 
     final amountValue = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) => Container(
         height: height * 0.75,
         width: width,
@@ -310,6 +318,7 @@ class _KioskScreenState extends State<KioskScreen> {
 
     final qrValue = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) => SizedBox(
         height: height / 2,
         width: width,
@@ -591,5 +600,125 @@ class _KioskScreenState extends State<KioskScreen> {
         ),
       ],
     );
+  }
+}
+
+class MyVirtualKeyboard extends StatefulWidget {
+  const MyVirtualKeyboard({super.key});
+
+  @override
+  MyVirtualKeyboardState createState() => MyVirtualKeyboardState();
+}
+
+class MyVirtualKeyboardState extends State<MyVirtualKeyboard> {
+  final MyTextInputControl _inputControl = MyTextInputControl();
+
+  @override
+  void initState() {
+    super.initState();
+    _inputControl.register();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _inputControl.unregister();
+  }
+
+  void _handleKeyPress(String key) {
+    _inputControl.processUserInput(key);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _inputControl.visible,
+      builder: (_, bool visible, __) {
+        return Visibility(
+          visible: visible,
+          child: FocusScope(
+            canRequestFocus: false,
+            child: TextFieldTapRegion(
+              child: Wrap(          
+                //mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  for (final String key in <String>
+                    ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫',])
+                    ElevatedButton(
+                      child: Text(key,
+                        style: TextStyle(
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                          //color: disabled ? Colors.grey : null,
+                        ),
+                      ),
+                      onPressed: () => _handleKeyPress(key),
+                    ),
+                ],
+              
+             )  
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class MyTextInputControl with TextInputControl {
+  TextEditingValue _editingState = TextEditingValue.empty;
+  final ValueNotifier<bool> _visible = ValueNotifier<bool>(false);
+
+  /// The input control's visibility state for updating the visual presentation.
+  ValueListenable<bool> get visible => _visible;
+
+  /// Register the input control.
+  void register() => TextInput.setInputControl(this);
+
+  /// Restore the original platform input control.
+  void unregister() => TextInput.restorePlatformInputControl();
+
+  @override
+  void show() => _visible.value = true;
+
+  @override
+  void hide() => _visible.value = false;
+
+  @override
+  void setEditingState(TextEditingValue value) => _editingState = value;
+
+  /// Process user input.
+  ///
+  /// Updates the internal editing state by inserting the input text,
+  /// and by replacing the current selection if any.
+  void processUserInput(String input) {
+    _editingState = _editingState.copyWith(
+      text: _insertText(input),
+      selection: _replaceSelection(input),
+    );
+
+    // Request the attached client to update accordingly.
+    TextInput.updateEditingValue(_editingState);
+  }
+
+  String _insertText(String input) {
+    final String text = _editingState.text;
+    final TextSelection selection = _editingState.selection;
+    if (input == '⌫') {
+      final start = selection.start;
+      if (start == 0) {
+        return text;
+      }
+      return text.replaceRange(start-1, start, '');
+    }
+    return text.replaceRange(selection.start, selection.end, input);
+  }
+
+  TextSelection _replaceSelection(String input) {
+    final TextSelection selection = _editingState.selection;
+    if (input == '⌫') {
+      return TextSelection.collapsed(offset: selection.start==0 ? 0 : selection.start-1);
+    }
+    return TextSelection.collapsed(offset: selection.start + input.length);
   }
 }
