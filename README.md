@@ -1,6 +1,8 @@
-# scanner
+# miniPOS
 
-A new Flutter project.
+A flutter application for blockchain alt currency that can run on a standalone Raspberry Pi kiosk or a mobile phone.
+
+https://www.notion.so/citizenwallet/Citizen-wallet-POS-hardware-58a038ce3e234e67827b8612d1805fb7?pvs=4#79fc3516d1d24897af28b8e4aeac324a
 
 ## Getting Started
 
