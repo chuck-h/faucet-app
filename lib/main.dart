@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
@@ -26,7 +27,7 @@ void main() async {
 
   final ns = NatsService();
   await ns.init(
-    servers: dotenv.get('NATS_SERVERS', fallback: 'nats://192.168.1.132:4222')
+    servers: dotenv.get('NATS_SERVERS', fallback: 'nats://localhost:4222')
   );
 
   runApp(provideAppState(const RootScreen()));

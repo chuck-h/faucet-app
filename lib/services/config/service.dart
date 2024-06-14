@@ -24,9 +24,10 @@ class ConfigService {
   }
 
   ConfigService._internal();
+  static const actingDebugMode = kDebugMode || true; //set true for rpi local config test
 
   static const String communityConfigListFileName =
-      kDebugMode ? 'communities.test' : 'communities';
+      actingDebugMode ? 'communities.test' : 'communities';
   static const String communityDebugFileName = 'debug';
   static const int version = 3;
 
@@ -42,7 +43,7 @@ class ConfigService {
 
   Future<Config> getWebConfig(String appLinkSuffix) async {
     try {
-      if (kDebugMode) {
+      if (actingDebugMode) {
         final localConfig = jsonDecode(
             await rootBundle.loadString('assets/config/v$version/debug.json'));
 
@@ -112,7 +113,7 @@ class ConfigService {
 
   void initWeb() {
     final scheme = Uri.base.scheme.isNotEmpty ? Uri.base.scheme : 'http';
-    final url = kDebugMode || Uri.base.host.contains('localhost')
+    final url = actingDebugMode || Uri.base.host.contains('localhost')
         ? 'https://config.internal.citizenwallet.xyz'
         : '$scheme://${Uri.base.host}:${Uri.base.port}/wallet-config';
 
@@ -123,7 +124,7 @@ class ConfigService {
   void init(String endpoint) {
     _api = APIService(baseURL: endpoint);
 
-    if (kDebugMode) {
+    if (actingDebugMode) {
       _loadFromLocal();
       return;
     }
@@ -153,7 +154,7 @@ class ConfigService {
   }
 
   Future<List<Config>> getConfigs({String? alias}) async {
-    if (kDebugMode) {
+    if (actingDebugMode) {
       final localConfigs = jsonDecode(await rootBundle.loadString(
           'assets/config/v$version/$communityConfigListFileName.json'));
 

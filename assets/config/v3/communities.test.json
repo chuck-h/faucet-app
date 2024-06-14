@@ -1096,7 +1096,7 @@
     "token": {
       "standard": "eosio",
       "name": "Seeds",
-      "address": "0x3C960E72BBbD837293e75080E1d0Fee6a4640357",
+      "address": "token.seeds",
       "symbol": "SEEDS",
       "decimals": 4
     },
@@ -1105,7 +1105,7 @@
       "name": "Telos zero"
     },
     "node": {
-      "url": "https://stylish-floral-morning.celo-mainnet.quiknode.pro/1de8e39f6e2189f62b565360b05569f33d40801d",
+      "url": "https://mainnet.telos.net",
       "ws_url": "wss://stylish-floral-morning.celo-mainnet.quiknode.pro/1de8e39f6e2189f62b565360b05569f33d40801d",
       "chain_id": 42220
     },

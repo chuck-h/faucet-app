@@ -486,7 +486,7 @@ class Config {
       indexer: IndexerConfig.fromJson(json['indexer']),
       ipfs: IPFSConfig.fromJson(json['ipfs']),
       node: NodeConfig.fromJson(json['node']),
-      erc4337: json['erc4337']==null ? ERC4337Config.fromJson(json['erc4337']) : null,
+      erc4337: json['erc4337'].length==0 ? null : ERC4337Config.fromJson(json['erc4337']),
       token: TokenConfig.fromJson(json['token']),
       profile: ProfileConfig.fromJson(json['profile']),
       cards: json['cards'] != null ? CardsConfig.fromJson(json['cards']) : null,
