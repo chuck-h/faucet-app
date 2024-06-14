@@ -46,7 +46,7 @@ class ScanLogic extends WidgetsBindingObserver {
       _web3 = Web3Service();
 
       String? selectedAlias = alias ?? _preferences.getLastAlias();
-      if (selectedAlias == null) {
+      if (selectedAlias == null || false) {
         final configs =
             (await _config.getConfigs()).where((c) => c.cards != null).toList();
 
@@ -63,26 +63,32 @@ class ScanLogic extends WidgetsBindingObserver {
         throw Exception('No cards');
       }
 
-      if (config.erc4337.paymasterAddress == null) {
-        throw Exception('No paymaster');
+      switch(config.token.standard) {
+        case "eosio":
+
+        break;
+        default:
+          if (config.erc4337?.paymasterAddress == null) {
+            throw Exception('No paymaster');
+          }
+
+          await _web3.init(
+            config.node.url,
+            config.ipfs.url,
+            config.erc4337!.rpcUrl,
+            config.indexer.url,
+            config.indexer.ipfsUrl,
+            config.erc4337!.paymasterRPCUrl,
+            config.erc4337!.paymasterAddress!,
+            config.cards!.cardFactoryAddress,
+            config.erc4337!.accountFactoryAddress,
+            config.erc4337!.entrypointAddress,
+            config.token.address,
+            config.profile.address,
+          );
+
+          _state.setVendorAddress(_web3.account.hexEip55);
       }
-
-      await _web3.init(
-        config.node.url,
-        config.ipfs.url,
-        config.erc4337.rpcUrl,
-        config.indexer.url,
-        config.indexer.ipfsUrl,
-        config.erc4337.paymasterRPCUrl,
-        config.erc4337.paymasterAddress!,
-        config.cards!.cardFactoryAddress,
-        config.erc4337.accountFactoryAddress,
-        config.erc4337.entrypointAddress,
-        config.token.address,
-        config.profile.address,
-      );
-
-      _state.setVendorAddress(_web3.account.hexEip55);
 
       _state.setConfig(config);
       _state.setConfigs(await _config.getConfigs());
