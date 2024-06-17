@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:scanner/screens/types_keyboard.dart';
+import 'package:scanner/screens/keyboard_aux.dart';
 import 'package:scanner/state/products/logic.dart';
 import 'package:scanner/state/products/state.dart';
 import 'package:scanner/state/scan/state.dart';
 import 'package:scanner/utils/formatters.dart';
+import 'package:virtual_keyboard_custom_layout/virtual_keyboard_custom_layout.dart';
+
 
 class ManageProductsScreen extends StatefulWidget {
   const ManageProductsScreen({super.key});
@@ -49,17 +53,32 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
     final FocusNode amountFocusNode = FocusNode();
     final AmountFormatter amountFormatter = AmountFormatter();
 
+    // ---------------- for virtual keyboard ----------------------------
+
+    bool shiftEnabled = false;
+    // is true will show the numeric keyboard.
+    bool isNumericMode = false;
+
+    // key variables to utilize the keyboard with the class KeyboardAux
+    var isKeyboardVisible = false;
+    var controllerKeyboard = TextEditingController();
+    TypeLayout typeLayout = TypeLayout.numeric;
+
+
     final confirm = await showModalBottomSheet<bool?>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) {
         final keyboardHeight = MediaQuery.of(modalContext).viewInsets.bottom;
-
         final config = modalContext.watch<ScanState>().config;
-
+        return StatefulBuilder(builder: (BuildContext context, StateSetter setState) {
         return GestureDetector(
-          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            isKeyboardVisible = false;
+          },
           child: Container(
-            height: 220 + keyboardHeight,
+            height: 220 + keyboardHeight + 280,
             width: width,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Column(
@@ -89,7 +108,15 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                   ],
                 ),
                 TextField(
+                  keyboardType: TextInputType.none,
                   controller: nameController,
+                  onTap: () {
+                      setState(() {
+                      isKeyboardVisible = true;
+                      controllerKeyboard = nameController;
+                      typeLayout = TypeLayout.alphabet;
+                    });
+                  },
                   decoration: const InputDecoration(
                     labelText: 'Name',
                   ),
@@ -98,7 +125,15 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                   onSubmitted: (_) => amountFocusNode.requestFocus(),
                 ),
                 TextField(
+                  keyboardType: TextInputType.none,
                   controller: priceController,
+                  onTap: () {
+                    setState(() {
+                      isKeyboardVisible = true;
+                      controllerKeyboard = priceController;
+                      typeLayout = TypeLayout.numeric;
+                    });
+                  },                  
                   decoration: InputDecoration(
                     labelText: 'Price',
                     prefix: Text('${config?.token.symbol ?? ''} '),
@@ -108,18 +143,27 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                   autocorrect: false,
                   enableSuggestions: false,
                   focusNode: amountFocusNode,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                    signed: false,
-                  ),
                   textInputAction: TextInputAction.done,
                   inputFormatters: [amountFormatter],
                 ),
-                const Spacer(),
+                //const Spacer(),
+                Expanded (
+                  child: Container(),
+                ),
+                if (isKeyboardVisible)
+                    KeyboardAux(
+                      key: ValueKey(typeLayout),
+                      alwaysCaps: true,
+                      controller: controllerKeyboard,
+                      typeLayout: typeLayout,
+                      typeKeyboard: VirtualKeyboardType.Custom,
+                    ),
+                  
               ],
             ),
           ),
         );
+        });
       },
     );
 

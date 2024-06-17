@@ -57,6 +57,7 @@ dependencies:
   simple_animations: ^5.0.2
   rate_limiter: ^1.0.0
   dart_nats: ^0.6.2
+  virtual_keyboard_custom_layout: ^1.0.0
 
 
 dev_dependencies:
