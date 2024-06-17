@@ -311,12 +311,13 @@ class ScanLogic extends WidgetsBindingObserver {
       switch (config.token.standard) {
         case 'eosio':
           // build transaction
-          var nonce = 666; // should change
+          var nonce = (DateTime.now().millisecondsSinceEpoch/100).toInt()%10000; // 0.1 second counter
           var recipient = "coinsacct111"; // merchant's receiving account
           final memo = 'kiosk%20sale%20$nonce';
           final encode_service = APIService(baseURL: dotenv.get('ENCODE_TX_SVC_URL'));
           final query = '?to=$recipient&from=............1&quantity=$amount' +
-            '&tokenSymbol=$symbol&tokenContract=${config.token.address}&memo=$memo';
+            '&tokenSymbol=$symbol&tokenContract=${config.token.address}&memo=$memo' +
+            '&justonce=$nonce';
           final encode_result = await encode_service.get(url: query);
 
           // display encoded transaction as QR
