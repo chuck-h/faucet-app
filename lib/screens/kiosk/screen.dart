@@ -4,7 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:scanner/screens/types_keyboard.dart';
+import 'package:scanner/screens/keyboard_aux.dart';
 import 'package:scanner/router/bottom_tabs.dart';
+import 'package:scanner/services/nats/nats.dart';
 import 'package:scanner/services/web3/utils.dart';
 import 'package:scanner/state/app/logic.dart';
 import 'package:scanner/state/app/state.dart';
@@ -16,6 +19,8 @@ import 'package:scanner/utils/strings.dart';
 import 'package:scanner/widget/nfc_overlay.dart';
 import 'package:scanner/widget/profile_chip.dart';
 import 'package:scanner/widget/qr/qr.dart';
+import 'package:virtual_keyboard_custom_layout/virtual_keyboard_custom_layout.dart';
+
 
 class KioskScreen extends StatefulWidget {
   const KioskScreen({super.key});
@@ -117,7 +122,7 @@ class _KioskScreenState extends State<KioskScreen> {
     if (codeValue == null ||
         codeValue.isEmpty ||
         codeValue.length != 6 ||
-        codeValue != '123987') {
+        codeValue != '123987') { // TODO: get unlock code from .env
       return false;
     }
 
@@ -370,6 +375,142 @@ class _KioskScreenState extends State<KioskScreen> {
     GoRouter.of(context).push('/kiosk/profile');
   }
 
+  void handleWifiSetup(BuildContext context) async {
+    await handleWifiEntry();
+  }
+
+
+  Future<void> handleWifiEntry() async {
+    final width = MediaQuery.of(context).size.width;
+    final height = MediaQuery.of(context).size.height;
+
+    final ssidController = TextEditingController();
+    final pwdController = TextEditingController();
+
+    final FocusNode amountFocusNode = FocusNode();
+
+    // ---------------- for virtual keyboard ----------------------------
+
+    bool shiftEnabled = false;
+    // is true will show the numeric keyboard.
+    bool isNumericMode = false;
+
+    // key variables to utilize the keyboard with the class KeyboardAux
+    var isKeyboardVisible = false;
+    var controllerKeyboard = TextEditingController();
+    TypeLayout typeLayout = TypeLayout.numeric;
+
+
+    final confirm = await showModalBottomSheet<bool?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (modalContext) {
+        final keyboardHeight = 300.0;
+        final config = modalContext.watch<ScanState>().config;
+        return StatefulBuilder(builder: (BuildContext context, StateSetter wSetState) {
+        return GestureDetector(
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            isKeyboardVisible = false;
+          },
+          child: Container(
+            height: 220 + keyboardHeight,
+            width: width,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Wifi Configuration',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () {
+                        modalContext.pop(true);
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text(
+                        'Set',
+                        style: TextStyle(fontSize: 24),
+                      ),
+                    ),
+                  ],
+                ),
+                TextField(
+                  keyboardType: TextInputType.none,
+                  controller: ssidController,
+                  onTap: () {
+                      wSetState(() {
+                      isKeyboardVisible = true;
+                      controllerKeyboard = ssidController;
+                      typeLayout = TypeLayout.alphabet;
+                    });
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'SSID',
+                  ),
+                  maxLines: 1,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => amountFocusNode.requestFocus(),
+                ),
+                TextField(
+                  keyboardType: TextInputType.none,
+                  controller: pwdController,
+                  onTap: () {
+                    wSetState(() {
+                      isKeyboardVisible = true;
+                      controllerKeyboard = pwdController;
+                      typeLayout = TypeLayout.alphabet;
+                    });
+                  },                  
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                  ),
+                  maxLines: 1,
+                  maxLength: 25,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  focusNode: amountFocusNode,
+                  textInputAction: TextInputAction.done,
+                  inputFormatters: [],
+                ),
+                //const Spacer(),
+                Expanded (
+                  child: Container(),
+                ),
+                if (isKeyboardVisible)
+                    KeyboardAux(
+                      alwaysCaps: false,
+                      controller: controllerKeyboard,
+                      typeLayout: typeLayout,
+                      typeKeyboard: VirtualKeyboardType.Custom,
+                    ),
+                  
+              ],
+            ),
+          ),
+        );
+        });
+      },
+    );
+
+    if (confirm != true) {
+      //_logic.clearForm();
+      return;
+    }
+    final ns = NatsService();
+    //TODO: scramble pwd with key from .env [valid chars are 0x20-0x7e]
+    await ns.client.pubString("local.wifisetup", "${ssidController.text}\t${pwdController.text}");
+  }
+
+
   void handleUnlockAdminSection() async {
     final ok = await handleCodeVerification();
     if (!ok) {
@@ -519,6 +660,19 @@ class _KioskScreenState extends State<KioskScreen> {
                                     ),
                                     label: const Text(
                                       'Withdraw faucet',
+                                      style: TextStyle(fontSize: 24),
+                                    ),
+                                  ),
+                                  FilledButton.icon(
+                                    onPressed: () =>
+                                        handleWifiSetup(context),
+                                    icon: const Icon(Icons.edit),
+                                    style: const ButtonStyle(
+                                      backgroundColor:
+                                          WidgetStatePropertyAll(Colors.black),
+                                    ),
+                                    label: const Text(
+                                      'Set wifi connection',
                                       style: TextStyle(fontSize: 24),
                                     ),
                                   ),
