@@ -450,7 +450,7 @@ class _KioskScreenState extends State<KioskScreen> {
                       wSetState(() {
                       isKeyboardVisible = true;
                       controllerKeyboard = ssidController;
-                      typeLayout = TypeLayout.alphabet;
+                      typeLayout = TypeLayout.alphanum;
                     });
                   },
                   decoration: const InputDecoration(
@@ -467,7 +467,7 @@ class _KioskScreenState extends State<KioskScreen> {
                     wSetState(() {
                       isKeyboardVisible = true;
                       controllerKeyboard = pwdController;
-                      typeLayout = TypeLayout.alphabet;
+                      typeLayout = TypeLayout.alphanum;
                     });
                   },                  
                   decoration: InputDecoration(
@@ -475,6 +475,7 @@ class _KioskScreenState extends State<KioskScreen> {
                   ),
                   maxLines: 1,
                   maxLength: 25,
+                  //obscureText: true,
                   autocorrect: false,
                   enableSuggestions: false,
                   focusNode: amountFocusNode,
