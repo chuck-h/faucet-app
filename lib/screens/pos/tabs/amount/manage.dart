@@ -69,7 +69,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
       context: context,
       isScrollControlled: true,
       builder: (modalContext) {
-        final keyboardHeight = MediaQuery.of(modalContext).viewInsets.bottom;
+        final keyboardHeight = 300.0;
         final config = modalContext.watch<ScanState>().config;
         return StatefulBuilder(builder: (BuildContext context, StateSetter setState) {
         return GestureDetector(
@@ -78,7 +78,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
             isKeyboardVisible = false;
           },
           child: Container(
-            height: 220 + keyboardHeight + 280,
+            height: 220 + keyboardHeight,
             width: width,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Column(
@@ -152,8 +152,7 @@ class _ManageProductsScreenState extends State<ManageProductsScreen> {
                 ),
                 if (isKeyboardVisible)
                     KeyboardAux(
-                      key: ValueKey(typeLayout),
-                      alwaysCaps: true,
+                      alwaysCaps: false,
                       controller: controllerKeyboard,
                       typeLayout: typeLayout,
                       typeKeyboard: VirtualKeyboardType.Custom,
