@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -50,8 +51,19 @@ class _KioskScreenState extends State<KioskScreen> {
     });
   }
 
+  final ipRegex = RegExp(r'inet ([0-9.]*)');
+  String? currentIp;
+
   void onLoad() {
     _profileLogic.loadProfile();
+    // get our ip address for display
+    Process.run('bash', ['-c', 'ip -4 addr show wlan0']).then(
+      (iipResult) {
+        setState( () {
+          currentIp = ipRegex.firstMatch(iipResult.stdout)?[0];
+        });
+      }
+    );
   }
 
   void handleCopy() {
@@ -71,6 +83,9 @@ class _KioskScreenState extends State<KioskScreen> {
       });
     });
   }
+
+
+
 
   Future<bool> handleCodeVerification() async {
     final width = MediaQuery.of(context).size.width;
@@ -376,11 +391,6 @@ class _KioskScreenState extends State<KioskScreen> {
   }
 
   void handleWifiSetup(BuildContext context) async {
-    await handleWifiEntry();
-  }
-
-
-  Future<void> handleWifiEntry() async {
     final width = MediaQuery.of(context).size.width;
     final height = MediaQuery.of(context).size.height;
 
@@ -399,7 +409,6 @@ class _KioskScreenState extends State<KioskScreen> {
     var isKeyboardVisible = false;
     var controllerKeyboard = TextEditingController();
     TypeLayout typeLayout = TypeLayout.numeric;
-
 
     final confirm = await showModalBottomSheet<bool?>(
       context: context,
@@ -506,9 +515,25 @@ class _KioskScreenState extends State<KioskScreen> {
       //_logic.clearForm();
       return;
     }
-    final ns = NatsService();
-    //TODO: scramble pwd with key from .env [valid chars are 0x20-0x7e]
-    await ns.client.pubString("local.wifisetup", "${ssidController.text}\t${pwdController.text}");
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Connecting...'),
+      ),
+    );
+    // set up raspberry pi wifi via command line tools
+    await Process.run('bash', ['-c', 'sudo iwlist wlan0 scanning']);
+    await Process.run('bash', ['-c', 'sudo ifconfig wlan0 up']);
+    await Process.run('bash', ['-c', 'sudo raspi-config nonint do_wifi_country US']);
+    await Process.run('bash', ['-c', 'sudo raspi-config nonint do_wifi_ssid_passphrase ${ssidController.text} ${pwdController.text}']);
+    await Process.run('bash', ['-c', 'sudo ifconfig wlan0 dn']);
+    await Future.delayed(Duration(milliseconds: 500));
+    await Process.run('bash', ['-c', 'sudo ifconfig wlan0 up']);
+    // wait for DHCP etc
+    await Future.delayed(Duration(milliseconds: 5000));
+    final ipResult = await Process.run('bash', ['-c', 'ip -4 addr show wlan0']);
+    setState(() {
+          currentIp = ipRegex.firstMatch(ipResult.stdout)?[0];
+    });
   }
 
 
@@ -676,6 +701,10 @@ class _KioskScreenState extends State<KioskScreen> {
                                       'Set wifi connection',
                                       style: TextStyle(fontSize: 24),
                                     ),
+                                  ),
+                                  Text(
+                                    currentIp ?? '',
+                                    textAlign: TextAlign.center
                                   ),
                                   const SizedBox(
                                     height: 60,
