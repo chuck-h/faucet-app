@@ -1,8 +1,14 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:scanner/screens/types_keyboard.dart';
+import 'package:scanner/screens/keyboard_aux.dart';
 import 'package:scanner/router/bottom_tabs.dart';
+import 'package:scanner/services/nats/nats.dart';
 import 'package:scanner/services/web3/utils.dart';
 import 'package:scanner/state/app/logic.dart';
 import 'package:scanner/state/app/state.dart';
@@ -14,6 +20,8 @@ import 'package:scanner/utils/strings.dart';
 import 'package:scanner/widget/nfc_overlay.dart';
 import 'package:scanner/widget/profile_chip.dart';
 import 'package:scanner/widget/qr/qr.dart';
+import 'package:virtual_keyboard_custom_layout/virtual_keyboard_custom_layout.dart';
+
 
 class KioskScreen extends StatefulWidget {
   const KioskScreen({super.key});
@@ -43,8 +51,19 @@ class _KioskScreenState extends State<KioskScreen> {
     });
   }
 
+  final ipRegex = RegExp(r'inet ([0-9.]*)');
+  String? currentIp;
+
   void onLoad() {
     _profileLogic.loadProfile();
+    // get our ip address for display
+    Process.run('bash', ['-c', 'ip -4 addr show wlan0']).then(
+      (iipResult) {
+        setState( () {
+          currentIp = ipRegex.firstMatch(iipResult.stdout)?[0];
+        });
+      }
+    );
   }
 
   void handleCopy() {
@@ -65,14 +84,19 @@ class _KioskScreenState extends State<KioskScreen> {
     });
   }
 
+
+
+
   Future<bool> handleCodeVerification() async {
     final width = MediaQuery.of(context).size.width;
     final height = MediaQuery.of(context).size.height;
 
     TextEditingController codeController = TextEditingController();
+    final FocusNode _focusNode = FocusNode();
 
     final codeValue = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) => Container(
         height: height * 0.75,
         width: width,
@@ -81,6 +105,7 @@ class _KioskScreenState extends State<KioskScreen> {
           children: [
             TextField(
               controller: codeController,
+              focusNode: _focusNode,
               decoration: const InputDecoration(
                 labelText: 'Code',
               ),
@@ -89,10 +114,10 @@ class _KioskScreenState extends State<KioskScreen> {
               autocorrect: false,
               autofocus: true,
               enableSuggestions: false,
-              keyboardType: const TextInputType.numberWithOptions(
+              /*keyboardType: const TextInputType.numberWithOptions(
                 decimal: false,
                 signed: false,
-              ),
+              ), */
               textInputAction: TextInputAction.done,
             ),
             OutlinedButton.icon(
@@ -102,20 +127,20 @@ class _KioskScreenState extends State<KioskScreen> {
               icon: const Icon(Icons.qr_code),
               label: const Text('Confirm'),
             ),
+            MyVirtualKeyboard(),
           ],
         ),
       ),
+      
     );
 
-    /* quick hack for rpi testing
-     *  modal bottom sheet keyboard doesn't display
     if (codeValue == null ||
         codeValue.isEmpty ||
         codeValue.length != 6 ||
-        codeValue != '123987') {
+        codeValue != '123987') { // TODO: get unlock code from .env
       return false;
     }
-    */
+
     return true;
   }
 
@@ -132,6 +157,7 @@ class _KioskScreenState extends State<KioskScreen> {
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) {
         final vendorAddress = modalContext.watch<ScanState>().vendorAddress;
         final vendorBalance = modalContext.watch<ScanState>().vendorBalance;
@@ -217,6 +243,7 @@ class _KioskScreenState extends State<KioskScreen> {
 
     showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) => Container(
         height: height * 0.75,
         width: width,
@@ -264,6 +291,7 @@ class _KioskScreenState extends State<KioskScreen> {
 
     final amountValue = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) => Container(
         height: height * 0.75,
         width: width,
@@ -310,6 +338,7 @@ class _KioskScreenState extends State<KioskScreen> {
 
     final qrValue = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (modalContext) => SizedBox(
         height: height / 2,
         width: width,
@@ -360,6 +389,153 @@ class _KioskScreenState extends State<KioskScreen> {
   void handleSetProfile() async {
     GoRouter.of(context).push('/kiosk/profile');
   }
+
+  void handleWifiSetup(BuildContext context) async {
+    final width = MediaQuery.of(context).size.width;
+    final height = MediaQuery.of(context).size.height;
+
+    final ssidController = TextEditingController();
+    final pwdController = TextEditingController();
+
+    final FocusNode amountFocusNode = FocusNode();
+
+    // ---------------- for virtual keyboard ----------------------------
+
+    bool shiftEnabled = false;
+    // is true will show the numeric keyboard.
+    bool isNumericMode = false;
+
+    // key variables to utilize the keyboard with the class KeyboardAux
+    var isKeyboardVisible = false;
+    var controllerKeyboard = TextEditingController();
+    TypeLayout typeLayout = TypeLayout.numeric;
+
+    final confirm = await showModalBottomSheet<bool?>(
+      context: context,
+      isScrollControlled: true,
+      builder: (modalContext) {
+        final keyboardHeight = 300.0;
+        final config = modalContext.watch<ScanState>().config;
+        return StatefulBuilder(builder: (BuildContext context, StateSetter wSetState) {
+        return GestureDetector(
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            isKeyboardVisible = false;
+          },
+          child: Container(
+            height: 220 + keyboardHeight,
+            width: width,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Wifi Configuration',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () {
+                        modalContext.pop(true);
+                      },
+                      icon: const Icon(Icons.add),
+                      label: const Text(
+                        'Set',
+                        style: TextStyle(fontSize: 24),
+                      ),
+                    ),
+                  ],
+                ),
+                TextField(
+                  keyboardType: TextInputType.none,
+                  controller: ssidController,
+                  onTap: () {
+                      wSetState(() {
+                      isKeyboardVisible = true;
+                      controllerKeyboard = ssidController;
+                      typeLayout = TypeLayout.alphanum;
+                    });
+                  },
+                  decoration: const InputDecoration(
+                    labelText: 'SSID',
+                  ),
+                  maxLines: 1,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => amountFocusNode.requestFocus(),
+                ),
+                TextField(
+                  keyboardType: TextInputType.none,
+                  controller: pwdController,
+                  onTap: () {
+                    wSetState(() {
+                      isKeyboardVisible = true;
+                      controllerKeyboard = pwdController;
+                      typeLayout = TypeLayout.alphanum;
+                    });
+                  },                  
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                  ),
+                  maxLines: 1,
+                  maxLength: 25,
+                  //obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  focusNode: amountFocusNode,
+                  textInputAction: TextInputAction.done,
+                  inputFormatters: [],
+                ),
+                //const Spacer(),
+                Expanded (
+                  child: Container(),
+                ),
+                if (isKeyboardVisible)
+                    KeyboardAux(
+                      alwaysCaps: false,
+                      controller: controllerKeyboard,
+                      typeLayout: typeLayout,
+                      typeKeyboard: VirtualKeyboardType.Custom,
+                    ),
+                  
+              ],
+            ),
+          ),
+        );
+        });
+      },
+    );
+
+    if (confirm != true) {
+      //_logic.clearForm();
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Connecting...'),
+      ),
+    );
+    // set up raspberry pi wifi via command line tools
+    await Process.run('bash', ['-c', 'sudo iwlist wlan0 scanning']);
+    await Process.run('bash', ['-c', 'sudo ifconfig wlan0 up']);
+    await Process.run('bash', ['-c', 'sudo raspi-config nonint do_wifi_country US']);
+    await Process.run('bash', ['-c', 'sudo raspi-config nonint do_wifi_ssid_passphrase ${ssidController.text} ${pwdController.text}']);
+    await Process.run('bash', ['-c', 'sudo ifconfig wlan0 dn']);
+    await Future.delayed(Duration(milliseconds: 500));
+    await Process.run('bash', ['-c', 'sudo ifconfig wlan0 up']);
+    // wait for DHCP etc
+    await Future.delayed(Duration(milliseconds: 5000));
+    final ipResult = await Process.run('bash', ['-c', 'ip -4 addr show wlan0']);
+    setState(() {
+          currentIp = ipRegex.firstMatch(ipResult.stdout)?[0];
+    });
+  }
+
 
   void handleUnlockAdminSection() async {
     final ok = await handleCodeVerification();
@@ -513,6 +689,23 @@ class _KioskScreenState extends State<KioskScreen> {
                                       style: TextStyle(fontSize: 24),
                                     ),
                                   ),
+                                  FilledButton.icon(
+                                    onPressed: () =>
+                                        handleWifiSetup(context),
+                                    icon: const Icon(Icons.edit),
+                                    style: const ButtonStyle(
+                                      backgroundColor:
+                                          WidgetStatePropertyAll(Colors.black),
+                                    ),
+                                    label: const Text(
+                                      'Set wifi connection',
+                                      style: TextStyle(fontSize: 24),
+                                    ),
+                                  ),
+                                  Text(
+                                    currentIp ?? '',
+                                    textAlign: TextAlign.center
+                                  ),
                                   const SizedBox(
                                     height: 60,
                                   ),
@@ -591,5 +784,125 @@ class _KioskScreenState extends State<KioskScreen> {
         ),
       ],
     );
+  }
+}
+
+class MyVirtualKeyboard extends StatefulWidget {
+  const MyVirtualKeyboard({super.key});
+
+  @override
+  MyVirtualKeyboardState createState() => MyVirtualKeyboardState();
+}
+
+class MyVirtualKeyboardState extends State<MyVirtualKeyboard> {
+  final MyTextInputControl _inputControl = MyTextInputControl();
+
+  @override
+  void initState() {
+    super.initState();
+    _inputControl.register();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _inputControl.unregister();
+  }
+
+  void _handleKeyPress(String key) {
+    _inputControl.processUserInput(key);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _inputControl.visible,
+      builder: (_, bool visible, __) {
+        return Visibility(
+          visible: visible,
+          child: FocusScope(
+            canRequestFocus: false,
+            child: TextFieldTapRegion(
+              child: Wrap(          
+                //mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  for (final String key in <String>
+                    ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫',])
+                    ElevatedButton(
+                      child: Text(key,
+                        style: TextStyle(
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                          //color: disabled ? Colors.grey : null,
+                        ),
+                      ),
+                      onPressed: () => _handleKeyPress(key),
+                    ),
+                ],
+              
+             )  
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class MyTextInputControl with TextInputControl {
+  TextEditingValue _editingState = TextEditingValue.empty;
+  final ValueNotifier<bool> _visible = ValueNotifier<bool>(false);
+
+  /// The input control's visibility state for updating the visual presentation.
+  ValueListenable<bool> get visible => _visible;
+
+  /// Register the input control.
+  void register() => TextInput.setInputControl(this);
+
+  /// Restore the original platform input control.
+  void unregister() => TextInput.restorePlatformInputControl();
+
+  @override
+  void show() => _visible.value = true;
+
+  @override
+  void hide() => _visible.value = false;
+
+  @override
+  void setEditingState(TextEditingValue value) => _editingState = value;
+
+  /// Process user input.
+  ///
+  /// Updates the internal editing state by inserting the input text,
+  /// and by replacing the current selection if any.
+  void processUserInput(String input) {
+    _editingState = _editingState.copyWith(
+      text: _insertText(input),
+      selection: _replaceSelection(input),
+    );
+
+    // Request the attached client to update accordingly.
+    TextInput.updateEditingValue(_editingState);
+  }
+
+  String _insertText(String input) {
+    final String text = _editingState.text;
+    final TextSelection selection = _editingState.selection;
+    if (input == '⌫') {
+      final start = selection.start;
+      if (start == 0) {
+        return text;
+      }
+      return text.replaceRange(start-1, start, '');
+    }
+    return text.replaceRange(selection.start, selection.end, input);
+  }
+
+  TextSelection _replaceSelection(String input) {
+    final TextSelection selection = _editingState.selection;
+    if (input == '⌫') {
+      return TextSelection.collapsed(offset: selection.start==0 ? 0 : selection.start-1);
+    }
+    return TextSelection.collapsed(offset: selection.start + input.length);
   }
 }

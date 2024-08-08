@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
+import 'package:scanner/services/api/api.dart';
 import 'package:scanner/services/config/service.dart';
 import 'package:scanner/services/nfc/service.dart';
 import 'package:scanner/services/preferences/service.dart';
@@ -46,7 +48,7 @@ class ScanLogic extends WidgetsBindingObserver {
       _web3 = Web3Service();
 
       String? selectedAlias = alias ?? _preferences.getLastAlias();
-      if (selectedAlias == null) {
+      if (selectedAlias == null || false) {
         final configs =
             (await _config.getConfigs()).where((c) => c.cards != null).toList();
 
@@ -63,26 +65,32 @@ class ScanLogic extends WidgetsBindingObserver {
         throw Exception('No cards');
       }
 
-      if (config.erc4337.paymasterAddress == null) {
-        throw Exception('No paymaster');
+      switch(config.token.standard) {
+        case "eosio":
+
+        break;
+        default:
+          if (config.erc4337?.paymasterAddress == null) {
+            throw Exception('No paymaster');
+          }
+
+          await _web3.init(
+            config.node.url,
+            config.ipfs.url,
+            config.erc4337!.rpcUrl,
+            config.indexer.url,
+            config.indexer.ipfsUrl,
+            config.erc4337!.paymasterRPCUrl,
+            config.erc4337!.paymasterAddress!,
+            config.cards!.cardFactoryAddress,
+            config.erc4337!.accountFactoryAddress,
+            config.erc4337!.entrypointAddress,
+            config.token.address,
+            config.profile.address,
+          );
+
+          _state.setVendorAddress(_web3.account.hexEip55);
       }
-
-      await _web3.init(
-        config.node.url,
-        config.ipfs.url,
-        config.erc4337.rpcUrl,
-        config.indexer.url,
-        config.indexer.ipfsUrl,
-        config.erc4337.paymasterRPCUrl,
-        config.erc4337.paymasterAddress!,
-        config.cards!.cardFactoryAddress,
-        config.erc4337.accountFactoryAddress,
-        config.erc4337.entrypointAddress,
-        config.token.address,
-        config.profile.address,
-      );
-
-      _state.setVendorAddress(_web3.account.hexEip55);
 
       _state.setConfig(config);
       _state.setConfigs(await _config.getConfigs());
@@ -300,60 +308,92 @@ class ScanLogic extends WidgetsBindingObserver {
       final symbol = config.token.symbol;
       final decimals = config.token.decimals;
 
-      _state.setNfcReading(true);
+      switch (config.token.standard) {
+        case 'eosio':
+          // build transaction
+          var nonce = (DateTime.now().millisecondsSinceEpoch/100).toInt()%10000; // 0.1 second counter
+          var recipient = "coinsacct111"; // merchant's receiving account
+          final memo = 'kiosk%20sale%20$nonce';
+          final encode_service = APIService(baseURL: dotenv.get('ENCODE_TX_SVC_URL'));
+          final query = '?to=$recipient&from=............1&quantity=$amount' +
+            '&tokenSymbol=$symbol&tokenContract=${config.token.address}&memo=$memo' +
+            '&justonce=$nonce';
+          final encode_result = await encode_service.get(url: query);
 
-      final serialNumber = await _nfc.readSerialNumber(
-        message: 'purchase for\n $amount $symbol\n \nSCAN WRISTBAND\n  TO PAY',
-        successMessage: 'Purchased for $amount $symbol',
-      );
+          // display encoded transaction as QR
+          await _nfc.displayQR('${encode_result['esr']}');
 
-      _state.setNfcReading(false);
+          // poll blockchain for transaction success
+          final rpc_service = APIService(baseURL: config.node.url);
+          final timestamp = DateTime.now().toUtc().toIso8601String();
+          for(var tries = 0; tries < 5; tries++ ) {
+            await Future.delayed(Duration(seconds: 2));
+            final rpc_query='/v2/history/get_actions?account=$recipient&act.name=transfer'+
+              '&after=$timestamp&transfer.memo=$memo';
+            final result = await rpc_service.get(url: rpc_query);
+            if(result['total']['value']!=0) {
+              _state.updateStatus(ScanStateType.ready);
+             await _nfc.displayMessage('Purchased for\n $amount $symbol');
+             return 'Purchase confirmed';
+            }
+          }
+          break;
 
-      final cardHash = await _web3.getCardHash(serialNumber);
+        default:
+          _state.setNfcReading(true);
 
-      final address = await _web3.getCardAddress(cardHash);
+          final serialNumber = await _nfc.readSerialNumber(
+            message: 'purchase for\n $amount $symbol\n \nSCAN WRISTBAND\n  TO PAY',
+            successMessage: 'Purchased for $amount $symbol',
+          );
 
-      final balance = await _web3.getBalance(address.hexEip55);
-      if (balance == BigInt.zero) {
-        throw Exception('Insufficient balance');
+          _state.setNfcReading(false);
+
+          final cardHash = await _web3.getCardHash(serialNumber);
+
+          final address = await _web3.getCardAddress(cardHash);
+
+          final balance = await _web3.getBalance(address.hexEip55);
+          if (balance == BigInt.zero) {
+            throw Exception('Insufficient balance');
+          }
+
+          final bigAmount = toUnit(amount, decimals: decimals);
+          if (bigAmount > balance) {
+            final currentBalance = fromUnit(
+              balance,
+              decimals: decimals,
+            );
+            throw Exception('Cost: $amount, Balance: $currentBalance');
+          }
+
+          final withdrawCallData = _web3.withdrawCallData(
+            cardHash,
+            toUnit(amount, decimals: decimals),
+          );
+
+          _state.updateStatus(ScanStateType.redeeming);
+
+          final (_, userop) = await _web3.prepareUserop(
+              [_web3.cardManagerAddress.hexEip55], [withdrawCallData]);
+
+          final data = TransferData(
+            'Purchased for $amount',
+          );
+
+          final txHash = await _web3.submitUserop(userop, data: data);
+          if (txHash == null) {
+            throw Exception('failed to withdraw');
+          }
+
+          _state.updateStatus(ScanStateType.verifying);
+
+          await _web3.waitForTxSuccess(txHash);
+
+          _state.updateStatus(ScanStateType.ready);
+          await _nfc.displayMessage('Purchased for\n $amount $symbol');
+          return 'Purchase confirmed';
       }
-
-      final bigAmount = toUnit(amount, decimals: decimals);
-      if (bigAmount > balance) {
-        final currentBalance = fromUnit(
-          balance,
-          decimals: decimals,
-        );
-        throw Exception('Cost: $amount, Balance: $currentBalance');
-      }
-
-      final withdrawCallData = _web3.withdrawCallData(
-        cardHash,
-        toUnit(amount, decimals: decimals),
-      );
-
-      _state.updateStatus(ScanStateType.redeeming);
-
-      final (_, userop) = await _web3.prepareUserop(
-          [_web3.cardManagerAddress.hexEip55], [withdrawCallData]);
-
-      final data = TransferData(
-        'Purchased for $amount',
-      );
-
-      final txHash = await _web3.submitUserop(userop, data: data);
-      if (txHash == null) {
-        throw Exception('failed to withdraw');
-      }
-
-      _state.updateStatus(ScanStateType.verifying);
-
-      await _web3.waitForTxSuccess(txHash);
-
-      _state.updateStatus(ScanStateType.ready);
-      await _nfc.displayMessage('Purchased for\n $amount $symbol');
-      return 'Purchase confirmed';
-
     } catch (e, s) {
       print(e);
       print(s);

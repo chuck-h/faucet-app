@@ -121,7 +121,9 @@ class AmountTabState extends State<AmountTab> {
               Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
+                  children: [ Container( 
+                    width: MediaQuery.of(context).size.width * 0.75,
+                    child:
                     GridView.count(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
@@ -157,6 +159,7 @@ class AmountTabState extends State<AmountTab> {
                         },
                       ).toList(),
                     ),
+                  ),
                   ],
                 ),
               ),

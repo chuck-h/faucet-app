@@ -235,6 +235,7 @@ class ERC4337Config {
     this.gasExtraPercentage = 13,
   });
 
+  // TBD(CH): return nullable (for null argument)
   factory ERC4337Config.fromJson(Map<String, dynamic> json) {
     return ERC4337Config(
       rpcUrl: json['rpc_url'],
@@ -457,7 +458,7 @@ class Config {
   final IndexerConfig indexer;
   final IPFSConfig ipfs;
   final NodeConfig node;
-  final ERC4337Config erc4337;
+  final ERC4337Config? erc4337;
   final TokenConfig token;
   final ProfileConfig profile;
   final CardsConfig? cards;
@@ -485,7 +486,7 @@ class Config {
       indexer: IndexerConfig.fromJson(json['indexer']),
       ipfs: IPFSConfig.fromJson(json['ipfs']),
       node: NodeConfig.fromJson(json['node']),
-      erc4337: ERC4337Config.fromJson(json['erc4337']),
+      erc4337: json['erc4337'].length==0 ? null : ERC4337Config.fromJson(json['erc4337']),
       token: TokenConfig.fromJson(json['token']),
       profile: ProfileConfig.fromJson(json['profile']),
       cards: json['cards'] != null ? CardsConfig.fromJson(json['cards']) : null,

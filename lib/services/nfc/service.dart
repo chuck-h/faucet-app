@@ -28,7 +28,10 @@ class NFCService {
     final ns = NatsService();
     await ns.client.pubString("local.nfcpadshow", message ?? ""); //null message blanks screen
   }
-
+  Future<void> displayQR(String? message) async {
+    final ns = NatsService();
+    await ns.client.pubString("local.nfcpadqr", message ?? ""); //null message blanks screen
+  }
   Future<void> stop() async {
 
   }
